@@ -32,6 +32,10 @@ let playerCoins: number = 0;
 
 // App
 //const app: HTMLDivElement = document.querySelector<HTMLDivElement>("#app")!;
+const appTitle: HTMLHeadingElement = document.querySelector<HTMLHeadingElement>(
+  "#appTitle",
+)!;
+appTitle.innerHTML = APP_NAME;
 document.title = APP_NAME;
 
 // Create map
