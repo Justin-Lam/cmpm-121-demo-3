@@ -103,16 +103,31 @@ function spawnCache(i: number, j: number) {
     popup.innerHTML = `
 			<div>This is cache (${i},${j}). It has <span id="coins">${coins}</span> coin(s).</div>
 			<button id="collectButton">Collect</button>
+			<button id="depositButton">Deposit</button>
 		`;
 
-    // Set collect button on click event
+    // Collect button on click event
     popup.querySelector<HTMLButtonElement>("#collectButton")!
       .addEventListener("click", () => {
-        coins--;
-        popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = coins
-          .toString();
-        playerCoins++;
-        updateInventoryPanelText();
+        if (coins > 0) {
+          coins--;
+          popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = coins
+            .toString();
+          playerCoins++;
+          updateInventoryPanelText();
+        }
+      });
+
+    // Deposit button on click event
+    popup.querySelector<HTMLButtonElement>("#depositButton")!
+      .addEventListener("click", () => {
+        if (playerCoins > 0) {
+          coins++;
+          popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = coins
+            .toString();
+          playerCoins--;
+          updateInventoryPanelText();
+        }
       });
 
     return popup;
