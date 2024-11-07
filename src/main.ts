@@ -41,6 +41,7 @@ const ZOOM: number = 19;
 const TILE_WIDTH: number = 1e-4; // 0.0001
 const TILE_VISIBILITY_RADIUS: number = 8; // we don't find nearby cells using a circle however, we use a square that's 2r x 2r
 const CACHE_SPAWN_PROBABILITY: number = 0.1;
+const CACHE_MIN_INITIAL_COINS: number = 1;
 const CACHE_MAX_INITIAL_COINS: number = 10; // pretty sure this is exclusive
 
 // Variables
@@ -110,7 +111,7 @@ function spawnCache(cell: Cell) {
   // Set num initial coins
   const numInitialCoins: number = Math.floor(
     luck([cell.y, cell.x, "initialValue"].toString()) *
-      CACHE_MAX_INITIAL_COINS,
+        CACHE_MAX_INITIAL_COINS + CACHE_MIN_INITIAL_COINS,
   );
 
   // Create coin array
@@ -123,6 +124,9 @@ function spawnCache(cell: Cell) {
     };
   }
 
+  // Initialize mode
+  let collectMode = true;
+
   // Create popup
   const popup: HTMLDivElement = document.createElement("div");
 
@@ -130,6 +134,27 @@ function spawnCache(cell: Cell) {
   header.innerHTML = `<h4>Cache ${cell.y}:${cell.x}</h4>`;
   popup.append(header);
 
+  const collectModeButton: HTMLButtonElement = document.createElement(
+    "button",
+  );
+  collectModeButton.innerHTML = "Collect";
+  collectModeButton.disabled = true;
+  collectModeButton.addEventListener("click", () => {
+    collectMode = true;
+    collectModeButton.disabled = true;
+    depositModeButton.disabled = false;
+    updateCacheInventoryPanel();
+  });
+  const depositModeButton: HTMLButtonElement = document.createElement(
+    "button",
+  );
+  depositModeButton.innerHTML = "Deposit";
+  depositModeButton.addEventListener("click", () => {
+    collectMode = false;
+    collectModeButton.disabled = false;
+    depositModeButton.disabled = true;
+    updateCacheInventoryPanel();
+  });
   const inventoryPanel: HTMLDivElement = document.createElement("div");
   popup.append(inventoryPanel);
   updateCacheInventoryPanel();
@@ -137,40 +162,42 @@ function spawnCache(cell: Cell) {
   // Show coins and their collect buttons
   function updateCacheInventoryPanel() {
     inventoryPanel.innerHTML = "Inventory:";
-    coins.forEach((coin, index) => {
-      const coinElem = document.createElement("span");
-      coinElem.innerHTML = `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
-      inventoryPanel.append(coinElem);
+    inventoryPanel.append(collectModeButton);
+    inventoryPanel.append(depositModeButton);
 
-      const collectButton = document.createElement("button");
-      collectButton.innerHTML = "Collect";
-      collectButton.addEventListener("click", () => {
-        coins.splice(index, 1);
-        addCoinToPlayerInventory(coin);
-        updateCacheInventoryPanel();
+    if (collectMode) {
+      coins.forEach((coin, index) => {
+        const coinElem = document.createElement("span");
+        coinElem.innerHTML = `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
+        inventoryPanel.append(coinElem);
+
+        const collectButton = document.createElement("button");
+        collectButton.innerHTML = "Collect";
+        collectButton.addEventListener("click", () => {
+          coins.splice(index, 1);
+          addCoinToPlayerInventory(coin);
+          updateCacheInventoryPanel();
+        });
+        coinElem.append(collectButton);
       });
-      coinElem.append(collectButton);
-    });
+    } else {
+      playerCoins.forEach((coin, index) => {
+        const coinElem = document.createElement("span");
+        coinElem.innerHTML = `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
+        inventoryPanel.append(coinElem);
+
+        const depositButton = document.createElement("button");
+        depositButton.innerHTML = "Deposit";
+        depositButton.addEventListener("click", () => {
+          const playerCoin = playerCoins.splice(index, 1)[0];
+          updatePlayerInventoryPanel();
+          coins.push(playerCoin);
+          updateCacheInventoryPanel();
+        });
+        coinElem.append(depositButton);
+      });
+    }
   }
-
-  const depositButton: HTMLButtonElement = document.createElement("button");
-  depositButton.innerHTML = "Deposit";
-  popup.append(depositButton);
-
-  /*
-	// Deposit button on click event
-	popup.querySelector<HTMLButtonElement>("#depositButton")!
-		.addEventListener("click", () => {
-			if (playerCoins > 0) {
-				numCoins++;
-				popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = numCoins
-					.toString();
-				playerCoins--;
-				updateInventoryPanelText();
-			}
-		});
-
-	*/
 
   // Make popup appear when cache is clicked
   cache.bindPopup(() => {
