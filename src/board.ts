@@ -1,8 +1,8 @@
 import leaflet from "leaflet";
 
 interface Cell {
-  readonly x: number;
-  readonly y: number;
+  readonly y: number; // y first because latitude = up/down
+  readonly x: number; // x second because longitude = left/right
 }
 
 // a flyweight factory for grid cells
@@ -21,8 +21,8 @@ export class Board {
 
   // this is the factory method
   private getCanonicalCell(cell: Cell): Cell {
-    const { x, y } = cell;
-    const key = [x, y].toString();
+    const { y, x } = cell;
+    const key = [y, x].toString();
     if (!this.knownCells.has(key)) {
       this.knownCells.set(key, cell);
     }
@@ -32,38 +32,32 @@ export class Board {
 
   getCellForPoint(point: leaflet.LatLng): Cell {
     return this.getCanonicalCell({
-      x: point.lat / this.tileWidth,
-      y: point.lng / this.tileWidth,
+      y: Math.trunc(point.lat / this.tileWidth),
+      x: Math.trunc(point.lng / this.tileWidth),
     });
   }
 
   // note that a cell's position is the same as its bottom left corner
   getCellBounds(cell: Cell): leaflet.LatLngBounds {
     return leaflet.latLngBounds([
-      [cell.x * this.tileWidth, cell.y * this.tileWidth], // bottom left corner
-      [(cell.x + 1) * this.tileWidth, (cell.y + 1) * this.tileWidth], // top right corner
+      [cell.y * this.tileWidth, cell.x * this.tileWidth], // bottom left corner
+      [(cell.y + 1) * this.tileWidth, (cell.x + 1) * this.tileWidth], // top right corner
     ]);
   }
 
   getCellsNearPoint(point: leaflet.LatLng): Cell[] {
     const resultCells: Cell[] = [];
     const originCell = this.getCellForPoint(point);
+    const radius = this.tileVisibilityRadius;
+
     // note that we use <= instead of < for our loop
     // this is necessary so the detection treats the left/right and top/bottom sides the same
-    // if (x, y) was (0, 0) and radius was 2, then we'd only check -2 through 1 for x and y if we were using <
-    for (
-      let x = -this.tileVisibilityRadius;
-      x <= this.tileVisibilityRadius;
-      x++
-    ) {
-      for (
-        let y = -this.tileVisibilityRadius;
-        y <= this.tileVisibilityRadius;
-        y++
-      ) {
+    // if (y, x) was (0, 0) and radius was 2, then we'd only check -2 through 1 for y and x if we were using <
+    for (let y = -radius; y <= radius; y++) {
+      for (let x = -radius; x <= radius; x++) {
         resultCells.push(this.getCanonicalCell({
-          x: originCell.x + x,
           y: originCell.y + y,
+          x: originCell.x + x,
         }));
       }
     }

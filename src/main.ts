@@ -13,13 +13,20 @@ import luck from "./luck.ts";
 
 // Grid cell flyweight factory
 import "./board.ts";
+import { Board } from "./board.ts";
 
-// App
+// Interfaces
+interface Cell {
+  readonly y: number; // y first because latitude = up/down
+  readonly x: number; // x second because longitude = left/right
+}
+
+// App Name
 const APP_NAME: string = "Geocoin GO";
 
 // Locations
 //const NULL_ISLAND: leaflet.LatLng = leaflet.latLng(0, 0);
-const ORIGIN: leaflet.LatLng = leaflet.latLng( // aka Oakes classroom
+const OAKES_CLASSROOM: leaflet.LatLng = leaflet.latLng(
   36.98949379578401,
   -122.06277128548504,
 );
@@ -27,14 +34,14 @@ const ORIGIN: leaflet.LatLng = leaflet.latLng( // aka Oakes classroom
 // Parameters
 const ZOOM: number = 19;
 const TILE_WIDTH: number = 1e-4; // 0.0001
-const NEIGHBORHOOD_RADIUS: number = 8; // we don't find neighbors using a circle however, we use a square that's 2r x 2r
+const TILE_VISIBILITY_RADIUS: number = 8; // we don't find nearby cells using a circle however, we use a square that's 2r x 2r
 const CACHE_SPAWN_PROBABILITY: number = 0.1;
 const CACHE_MAX_INITIAL_COINS: number = 10; // pretty sure this is exclusive
 
 // Variables
 let playerCoins: number = 0;
 
-// App
+// Set app title
 const appTitle: HTMLHeadingElement = document.querySelector<HTMLHeadingElement>(
   "#appTitle",
 )!;
@@ -43,12 +50,9 @@ document.title = APP_NAME;
 
 // Create map
 const map: leaflet.Map = leaflet.map(document.getElementById("map")!, {
-  center: ORIGIN,
+  center: OAKES_CLASSROOM,
   zoom: ZOOM,
-  minZoom: ZOOM,
-  maxZoom: ZOOM,
-  zoomControl: false,
-  scrollWheelZoom: false,
+  maxZoom: ZOOM, // for zooming in
 });
 
 // Give map tile layer
@@ -59,7 +63,7 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 // Create player marker
-const playerMarker: leaflet.Marker = leaflet.marker(ORIGIN);
+const playerMarker: leaflet.Marker = leaflet.marker(OAKES_CLASSROOM);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
@@ -72,43 +76,34 @@ function updateInventoryPanelText() {
   inventoryPanel.innerHTML = `${playerCoins} coins in inventory`;
 }
 
-// Spawn neighborhood caches
-for (let i = -NEIGHBORHOOD_RADIUS; i < NEIGHBORHOOD_RADIUS; i++) {
-  for (let j = -NEIGHBORHOOD_RADIUS; j < NEIGHBORHOOD_RADIUS; j++) {
-    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(i, j);
-    }
-  }
-}
-/** Adds a cache to the map given its cell number. */
-function spawnCache(i: number, j: number) {
-  // Convert cell numbers to lat/lng bounds
-  const bounds: leaflet.LatLngBounds = leaflet.latLngBounds([
-    [
-      ORIGIN.lat + i * TILE_WIDTH,
-      ORIGIN.lng + j * TILE_WIDTH,
-    ],
-    [
-      ORIGIN.lat + (i + 1) * TILE_WIDTH,
-      ORIGIN.lng + (j + 1) * TILE_WIDTH,
-    ],
-  ]);
+// Create board
+const board = new Board(TILE_WIDTH, TILE_VISIBILITY_RADIUS);
 
-  // Add cache (a rectangle) to map
-  const cache: leaflet.Rectangle = leaflet.rectangle(bounds);
+// Spawn neighborhood caches
+board.getCellsNearPoint(OAKES_CLASSROOM).forEach((cell) => {
+  if (luck([cell.y, cell.x].toString()) < CACHE_SPAWN_PROBABILITY) {
+    spawnCache(cell);
+  }
+});
+
+/** Adds a cache to the map at a cell's position. */
+function spawnCache(cell: Cell) {
+  // Add cache (a rectangle) to the map where the cell is
+  const cache: leaflet.Rectangle = leaflet.rectangle(board.getCellBounds(cell));
   cache.addTo(map);
 
   // Add cache to map
   cache.bindPopup(() => {
-    // Set coins
-    let coins: number = Math.floor(
-      luck([i, j, "initialValue"].toString()) * CACHE_MAX_INITIAL_COINS,
+    // Set num coins
+    let numCoins: number = Math.floor(
+      luck([cell.y, cell.x, "initialValue"].toString()) *
+        CACHE_MAX_INITIAL_COINS,
     );
 
     // Set popup description and button
     const popup: HTMLDivElement = document.createElement("div");
     popup.innerHTML = `
-			<div>This is cache (${i},${j}). It has <span id="coins">${coins}</span> coin(s).</div>
+			<div>This is cache (${cell.y},${cell.x}). It has <span id="coins">${numCoins}</span> coin(s).</div>
 			<button id="collectButton">Collect</button>
 			<button id="depositButton">Deposit</button>
 		`;
@@ -116,9 +111,9 @@ function spawnCache(i: number, j: number) {
     // Collect button on click event
     popup.querySelector<HTMLButtonElement>("#collectButton")!
       .addEventListener("click", () => {
-        if (coins > 0) {
-          coins--;
-          popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = coins
+        if (numCoins > 0) {
+          numCoins--;
+          popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = numCoins
             .toString();
           playerCoins++;
           updateInventoryPanelText();
@@ -129,8 +124,8 @@ function spawnCache(i: number, j: number) {
     popup.querySelector<HTMLButtonElement>("#depositButton")!
       .addEventListener("click", () => {
         if (playerCoins > 0) {
-          coins++;
-          popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = coins
+          numCoins++;
+          popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = numCoins
             .toString();
           playerCoins--;
           updateInventoryPanelText();
