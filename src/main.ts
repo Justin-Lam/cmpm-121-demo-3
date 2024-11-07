@@ -11,27 +11,30 @@ import "./leafletWorkaround.ts";
 // Deterministic random number generator
 import luck from "./luck.ts";
 
+// Grid cell flyweight factory
+import "./board.ts";
+
 // App
 const APP_NAME: string = "Geocoin GO";
 
 // Locations
+//const NULL_ISLAND: leaflet.LatLng = leaflet.latLng(0, 0);
 const ORIGIN: leaflet.LatLng = leaflet.latLng( // aka Oakes classroom
   36.98949379578401,
   -122.06277128548504,
 );
 
-// Gameplay Parameters
+// Parameters
 const ZOOM: number = 19;
-const TILE_DEGREES: number = 1e-4; // 0.0001
-const NEIGHBORHOOD_SIZE: number = 8;
+const TILE_WIDTH: number = 1e-4; // 0.0001
+const NEIGHBORHOOD_RADIUS: number = 8; // we don't find neighbors using a circle however, we use a square that's 2r x 2r
 const CACHE_SPAWN_PROBABILITY: number = 0.1;
 const CACHE_MAX_INITIAL_COINS: number = 10; // pretty sure this is exclusive
 
-// Coins
+// Variables
 let playerCoins: number = 0;
 
 // App
-//const app: HTMLDivElement = document.querySelector<HTMLDivElement>("#app")!;
 const appTitle: HTMLHeadingElement = document.querySelector<HTMLHeadingElement>(
   "#appTitle",
 )!;
@@ -70,8 +73,8 @@ function updateInventoryPanelText() {
 }
 
 // Spawn neighborhood caches
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
+for (let i = -NEIGHBORHOOD_RADIUS; i < NEIGHBORHOOD_RADIUS; i++) {
+  for (let j = -NEIGHBORHOOD_RADIUS; j < NEIGHBORHOOD_RADIUS; j++) {
     if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
       spawnCache(i, j);
     }
@@ -82,12 +85,12 @@ function spawnCache(i: number, j: number) {
   // Convert cell numbers to lat/lng bounds
   const bounds: leaflet.LatLngBounds = leaflet.latLngBounds([
     [
-      ORIGIN.lat + i * TILE_DEGREES,
-      ORIGIN.lng + j * TILE_DEGREES,
+      ORIGIN.lat + i * TILE_WIDTH,
+      ORIGIN.lng + j * TILE_WIDTH,
     ],
     [
-      ORIGIN.lat + (i + 1) * TILE_DEGREES,
-      ORIGIN.lng + (j + 1) * TILE_DEGREES,
+      ORIGIN.lat + (i + 1) * TILE_WIDTH,
+      ORIGIN.lng + (j + 1) * TILE_WIDTH,
     ],
   ]);
 
