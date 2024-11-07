@@ -20,6 +20,11 @@ interface Cell {
   readonly y: number; // y first because latitude = up/down
   readonly x: number; // x second because longitude = left/right
 }
+interface Coin {
+  readonly y: number;
+  readonly x: number;
+  readonly serial: number;
+}
 
 // App Name
 const APP_NAME: string = "Geocoin GO";
@@ -39,9 +44,9 @@ const CACHE_SPAWN_PROBABILITY: number = 0.1;
 const CACHE_MAX_INITIAL_COINS: number = 10; // pretty sure this is exclusive
 
 // Variables
-let playerCoins: number = 0;
+const playerCoins: Coin[] = [];
 
-// Set app title
+// App
 const appTitle: HTMLHeadingElement = document.querySelector<HTMLHeadingElement>(
   "#appTitle",
 )!;
@@ -71,9 +76,17 @@ playerMarker.addTo(map);
 const inventoryPanel: HTMLDivElement = document.querySelector<HTMLDivElement>(
   "#inventoryPanel",
 )!;
-updateInventoryPanelText();
-function updateInventoryPanelText() {
-  inventoryPanel.innerHTML = `${playerCoins} coins in inventory`;
+updatePlayerInventoryPanel();
+
+function updatePlayerInventoryPanel() {
+  inventoryPanel.innerHTML = "Inventory:";
+  playerCoins.forEach((coin) => {
+    inventoryPanel.innerHTML += `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
+  });
+}
+function addCoinToPlayerInventory(coin: Coin) {
+  playerCoins.push(coin);
+  updatePlayerInventoryPanel();
 }
 
 // Create board
@@ -89,49 +102,78 @@ board.getCellsNearPoint(OAKES_CLASSROOM).forEach((cell) => {
 /** Adds a cache to the map at a cell's position. */
 function spawnCache(cell: Cell) {
   // Add cache (a rectangle) to the map where the cell is
-  const cache: leaflet.Rectangle = leaflet.rectangle(board.getCellBounds(cell));
+  const cache: leaflet.Rectangle = leaflet.rectangle(
+    board.getCellBounds(cell),
+  );
   cache.addTo(map);
 
-  // Add cache to map
+  // Set num initial coins
+  const numInitialCoins: number = Math.floor(
+    luck([cell.y, cell.x, "initialValue"].toString()) *
+      CACHE_MAX_INITIAL_COINS,
+  );
+
+  // Create coin array
+  const coins: Coin[] = [];
+  for (let i = 0; i < numInitialCoins; i++) {
+    coins[i] = {
+      y: cell.y,
+      x: cell.x,
+      serial: i,
+    };
+  }
+
+  // Create popup
+  const popup: HTMLDivElement = document.createElement("div");
+
+  const header: HTMLHeadingElement = document.createElement("h3");
+  header.innerHTML = `<h4>Cache ${cell.y}:${cell.x}</h4>`;
+  popup.append(header);
+
+  const inventoryPanel: HTMLDivElement = document.createElement("div");
+  popup.append(inventoryPanel);
+  updateCacheInventoryPanel();
+
+  // Show coins and their collect buttons
+  function updateCacheInventoryPanel() {
+    inventoryPanel.innerHTML = "Inventory:";
+    coins.forEach((coin, index) => {
+      const coinElem = document.createElement("span");
+      coinElem.innerHTML = `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
+      inventoryPanel.append(coinElem);
+
+      const collectButton = document.createElement("button");
+      collectButton.innerHTML = "Collect";
+      collectButton.addEventListener("click", () => {
+        coins.splice(index, 1);
+        addCoinToPlayerInventory(coin);
+        updateCacheInventoryPanel();
+      });
+      coinElem.append(collectButton);
+    });
+  }
+
+  const depositButton: HTMLButtonElement = document.createElement("button");
+  depositButton.innerHTML = "Deposit";
+  popup.append(depositButton);
+
+  /*
+	// Deposit button on click event
+	popup.querySelector<HTMLButtonElement>("#depositButton")!
+		.addEventListener("click", () => {
+			if (playerCoins > 0) {
+				numCoins++;
+				popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = numCoins
+					.toString();
+				playerCoins--;
+				updateInventoryPanelText();
+			}
+		});
+
+	*/
+
+  // Make popup appear when cache is clicked
   cache.bindPopup(() => {
-    // Set num coins
-    let numCoins: number = Math.floor(
-      luck([cell.y, cell.x, "initialValue"].toString()) *
-        CACHE_MAX_INITIAL_COINS,
-    );
-
-    // Set popup description and button
-    const popup: HTMLDivElement = document.createElement("div");
-    popup.innerHTML = `
-			<div>This is cache (${cell.y},${cell.x}). It has <span id="coins">${numCoins}</span> coin(s).</div>
-			<button id="collectButton">Collect</button>
-			<button id="depositButton">Deposit</button>
-		`;
-
-    // Collect button on click event
-    popup.querySelector<HTMLButtonElement>("#collectButton")!
-      .addEventListener("click", () => {
-        if (numCoins > 0) {
-          numCoins--;
-          popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = numCoins
-            .toString();
-          playerCoins++;
-          updateInventoryPanelText();
-        }
-      });
-
-    // Deposit button on click event
-    popup.querySelector<HTMLButtonElement>("#depositButton")!
-      .addEventListener("click", () => {
-        if (playerCoins > 0) {
-          numCoins++;
-          popup.querySelector<HTMLSpanElement>("#coins")!.innerHTML = numCoins
-            .toString();
-          playerCoins--;
-          updateInventoryPanelText();
-        }
-      });
-
     return popup;
   });
 }
