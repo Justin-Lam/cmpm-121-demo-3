@@ -40,14 +40,14 @@ const OAKES_CLASSROOM: leaflet.LatLng = leaflet.latLng(
 const ZOOM: number = 19;
 const TILE_WIDTH: number = 1e-4; // 0.0001
 const TILE_VISIBILITY_RADIUS: number = 8; // we don't find nearby cells using a circle however, we use a square that's 2r x 2r
-const CACHE_SPAWN_PROBABILITY: number = 0.1;
+const CACHE_SPAWN_PROBABILITY: number = 0.1; // 10%
 const CACHE_MIN_INITIAL_COINS: number = 1;
 const CACHE_MAX_INITIAL_COINS: number = 10; // pretty sure this is exclusive
 
 // Variables
 const playerCoins: Coin[] = [];
 
-// App
+// Set app name
 const appTitle: HTMLHeadingElement = document.querySelector<HTMLHeadingElement>(
   "#appTitle",
 )!;
@@ -58,7 +58,7 @@ document.title = APP_NAME;
 const map: leaflet.Map = leaflet.map(document.getElementById("map")!, {
   center: OAKES_CLASSROOM,
   zoom: ZOOM,
-  maxZoom: ZOOM, // for zooming in
+  maxZoom: ZOOM, // max amount can zoom in
 });
 
 // Give map tile layer
@@ -74,17 +74,22 @@ playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
 // Show player inventory
-const inventoryPanel: HTMLDivElement = document.querySelector<HTMLDivElement>(
+const playerInventoryPanel: HTMLDivElement = document.querySelector<
+  HTMLDivElement
+>(
   "#inventoryPanel",
 )!;
 updatePlayerInventoryPanel();
 
+/** Makes the player inventory panel display the player's current coins. */
 function updatePlayerInventoryPanel() {
-  inventoryPanel.innerHTML = "Inventory:";
+  playerInventoryPanel.innerHTML = "Inventory:";
   playerCoins.forEach((coin) => {
-    inventoryPanel.innerHTML += `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
+    playerInventoryPanel.innerHTML +=
+      `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
   });
 }
+/** Adds a coin to the player's inventory and updates the player inventory panel. */
 function addCoinToPlayerInventory(coin: Coin) {
   playerCoins.push(coin);
   updatePlayerInventoryPanel();
@@ -115,9 +120,9 @@ function spawnCache(cell: Cell) {
   );
 
   // Create coin array
-  const coins: Coin[] = [];
+  const cacheCoins: Coin[] = [];
   for (let i = 0; i < numInitialCoins; i++) {
-    coins[i] = {
+    cacheCoins[i] = {
       y: cell.y,
       x: cell.x,
       serial: i,
@@ -138,7 +143,7 @@ function spawnCache(cell: Cell) {
     "button",
   );
   collectModeButton.innerHTML = "Collect";
-  collectModeButton.disabled = true;
+  collectModeButton.disabled = true; // collect mode enabled initially
   collectModeButton.addEventListener("click", () => {
     collectMode = true;
     collectModeButton.disabled = true;
@@ -155,43 +160,52 @@ function spawnCache(cell: Cell) {
     depositModeButton.disabled = true;
     updateCacheInventoryPanel();
   });
-  const inventoryPanel: HTMLDivElement = document.createElement("div");
-  popup.append(inventoryPanel);
+  const cacheInventoryPanel: HTMLDivElement = document.createElement("div");
+  popup.append(cacheInventoryPanel);
   updateCacheInventoryPanel();
 
-  // Show coins and their collect buttons
+  /** Makes the cache's inventory panel display either the cache's or the player's coins, depending on cache's mode. */
   function updateCacheInventoryPanel() {
-    inventoryPanel.innerHTML = "Inventory:";
-    inventoryPanel.append(collectModeButton);
-    inventoryPanel.append(depositModeButton);
+    // Reset the inventory pannel elem
+    cacheInventoryPanel.innerHTML = "Inventory:";
+
+    // Re add the mode buttons
+    cacheInventoryPanel.append(collectModeButton);
+    cacheInventoryPanel.append(depositModeButton);
 
     if (collectMode) {
-      coins.forEach((coin, index) => {
+      // Show the cache's coins
+      cacheCoins.forEach((coin, index) => {
+        // Coin
         const coinElem = document.createElement("span");
         coinElem.innerHTML = `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
-        inventoryPanel.append(coinElem);
+        cacheInventoryPanel.append(coinElem);
 
+        // Collect Button
         const collectButton = document.createElement("button");
         collectButton.innerHTML = "Collect";
         collectButton.addEventListener("click", () => {
-          coins.splice(index, 1);
+          cacheCoins.splice(index, 1);
           addCoinToPlayerInventory(coin);
           updateCacheInventoryPanel();
         });
         coinElem.append(collectButton);
       });
     } else {
+      // Show the player's coins
       playerCoins.forEach((coin, index) => {
+        // Coin
         const coinElem = document.createElement("span");
         coinElem.innerHTML = `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
-        inventoryPanel.append(coinElem);
+        cacheInventoryPanel.append(coinElem);
 
+        // Deposit Button
         const depositButton = document.createElement("button");
         depositButton.innerHTML = "Deposit";
         depositButton.addEventListener("click", () => {
           const playerCoin = playerCoins.splice(index, 1)[0];
           updatePlayerInventoryPanel();
-          coins.push(playerCoin);
+          cacheCoins.push(playerCoin);
           updateCacheInventoryPanel();
         });
         coinElem.append(depositButton);
