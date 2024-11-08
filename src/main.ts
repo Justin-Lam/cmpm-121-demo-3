@@ -20,6 +20,7 @@ interface Cell {
   readonly y: number; // y first because latitude = up/down
   readonly x: number; // x second because longitude = left/right
 }
+type Cache = leaflet.Rectangle;
 interface Coin {
   readonly y: number;
   readonly x: number;
@@ -36,7 +37,7 @@ const OAKES_CLASSROOM: leaflet.LatLng = leaflet.latLng(
   -122.06277128548504,
 );
 
-// Parameters
+// Gameplay Parameters
 const ZOOM: number = 19;
 const TILE_WIDTH: number = 1e-4; // 0.0001
 const TILE_VISIBILITY_RADIUS: number = 8; // we don't find nearby cells using a circle however, we use a square that's 2r x 2r
@@ -44,7 +45,9 @@ const CACHE_SPAWN_PROBABILITY: number = 0.1; // 10%
 const CACHE_MIN_INITIAL_COINS: number = 1;
 const CACHE_MAX_INITIAL_COINS: number = 10; // pretty sure this is exclusive
 
-// Variables
+// Player Variables
+let playerPosition: leaflet.LatLng = OAKES_CLASSROOM;
+let nearbyCaches: Cache[] = [];
 const playerCoins: Coin[] = [];
 
 // Set app name
@@ -56,7 +59,7 @@ document.title = APP_NAME;
 
 // Create map
 const map: leaflet.Map = leaflet.map(document.getElementById("map")!, {
-  center: OAKES_CLASSROOM,
+  center: playerPosition,
   zoom: ZOOM,
   maxZoom: ZOOM, // max amount can zoom in
 });
@@ -69,9 +72,49 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 // Create player marker
-const playerMarker: leaflet.Marker = leaflet.marker(OAKES_CLASSROOM);
+const playerMarker = leaflet.marker(playerPosition);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
+
+// Set movement button click behavior
+document.querySelector<HTMLButtonElement>("#moveNorthButton")!.addEventListener(
+  "click",
+  () => movePlayer(1, 0),
+);
+document.querySelector<HTMLButtonElement>("#moveSouthButton")!.addEventListener(
+  "click",
+  () => movePlayer(-1, 0),
+);
+document.querySelector<HTMLButtonElement>("#moveWestButton")!.addEventListener(
+  "click",
+  () => movePlayer(0, -1),
+);
+document.querySelector<HTMLButtonElement>("#moveEastButton")!.addEventListener(
+  "click",
+  () => movePlayer(0, 1),
+);
+document.querySelector<HTMLButtonElement>("#resetPositionButton")!
+  .addEventListener(
+    "click",
+    () => resetPlayerPosition(),
+  );
+
+function movePlayer(up: number, down: number): void {
+  playerPosition = leaflet.latLng({
+    lat: playerPosition.lat + up * TILE_WIDTH,
+    lng: playerPosition.lng + down * TILE_WIDTH,
+  });
+  onPlayerMove();
+}
+function resetPlayerPosition(): void {
+  playerPosition = OAKES_CLASSROOM;
+  onPlayerMove();
+}
+function onPlayerMove(): void {
+  playerMarker.setLatLng(playerPosition);
+  map.panTo(playerPosition);
+  updateNearbyCaches();
+}
 
 // Show player inventory
 const playerInventoryPanel: HTMLDivElement = document.querySelector<
@@ -82,7 +125,7 @@ const playerInventoryPanel: HTMLDivElement = document.querySelector<
 updatePlayerInventoryPanel();
 
 /** Makes the player inventory panel display the player's current coins. */
-function updatePlayerInventoryPanel() {
+function updatePlayerInventoryPanel(): void {
   playerInventoryPanel.innerHTML = "Inventory:";
   playerCoins.forEach((coin) => {
     playerInventoryPanel.innerHTML +=
@@ -90,7 +133,7 @@ function updatePlayerInventoryPanel() {
   });
 }
 /** Adds a coin to the player's inventory and updates the player inventory panel. */
-function addCoinToPlayerInventory(coin: Coin) {
+function addCoinToPlayerInventory(coin: Coin): void {
   playerCoins.push(coin);
   updatePlayerInventoryPanel();
 }
@@ -99,14 +142,25 @@ function addCoinToPlayerInventory(coin: Coin) {
 const board = new Board(TILE_WIDTH, TILE_VISIBILITY_RADIUS);
 
 // Spawn neighborhood caches
-board.getCellsNearPoint(OAKES_CLASSROOM).forEach((cell) => {
-  if (luck([cell.y, cell.x].toString()) < CACHE_SPAWN_PROBABILITY) {
-    spawnCache(cell);
-  }
-});
+updateNearbyCaches();
+
+function updateNearbyCaches(): void {
+  // Remove previous nearby caches
+  nearbyCaches.forEach((cache) => {
+    cache.remove();
+  });
+  nearbyCaches = [];
+
+  // Get new nearby caches
+  board.getCellsNearPoint(playerPosition).forEach((cell) => {
+    if (luck([cell.y, cell.x].toString()) < CACHE_SPAWN_PROBABILITY) {
+      nearbyCaches.push(spawnCache(cell));
+    }
+  });
+}
 
 /** Adds a cache to the map at a cell's position. */
-function spawnCache(cell: Cell) {
+function spawnCache(cell: Cell): Cache {
   // Add cache (a rectangle) to the map where the cell is
   const cache: leaflet.Rectangle = leaflet.rectangle(
     board.getCellBounds(cell),
@@ -165,7 +219,7 @@ function spawnCache(cell: Cell) {
   updateCacheInventoryPanel();
 
   /** Makes the cache's inventory panel display either the cache's or the player's coins, depending on cache's mode. */
-  function updateCacheInventoryPanel() {
+  function updateCacheInventoryPanel(): void {
     // Reset the inventory pannel elem
     cacheInventoryPanel.innerHTML = "Inventory:";
 
@@ -217,4 +271,7 @@ function spawnCache(cell: Cell) {
   cache.bindPopup(() => {
     return popup;
   });
+
+  // Return
+  return cache;
 }
