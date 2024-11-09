@@ -20,11 +20,14 @@ interface Cell {
   readonly y: number; // y first because latitude = up/down
   readonly x: number; // x second because longitude = left/right
 }
-type Cache = leaflet.Rectangle;
 interface Coin {
   readonly y: number;
   readonly x: number;
   readonly serial: number;
+}
+interface Memento<T> {
+  toMemento(): T;
+  fromMemento(memento: T): void;
 }
 
 // App Name
@@ -37,18 +40,190 @@ const OAKES_CLASSROOM: leaflet.LatLng = leaflet.latLng(
   -122.06277128548504,
 );
 
-// Gameplay Parameters
+// Parameters
 const ZOOM: number = 19;
 const TILE_WIDTH: number = 1e-4; // 0.0001
 const TILE_VISIBILITY_RADIUS: number = 8; // we don't find nearby cells using a circle however, we use a square that's 2r x 2r
 const CACHE_SPAWN_PROBABILITY: number = 0.1; // 10%
-const CACHE_MIN_INITIAL_COINS: number = 1;
-const CACHE_MAX_INITIAL_COINS: number = 10; // pretty sure this is exclusive
+const CACHE_MIN_INIT_COINS: number = 1;
+const CACHE_MAX_INIT_COINS: number = 10; // pretty sure this is exclusive
 
-// Player Variables
+// Variables
+const cacheMementos: Map<string, string> = new Map<string, string>();
 let playerPosition: leaflet.LatLng = OAKES_CLASSROOM;
 let nearbyCaches: Cache[] = [];
 const playerCoins: Coin[] = [];
+
+// Classes
+class Cache implements Memento<string> {
+  private cell: Cell;
+  private coins: Coin[]; // only thing that's mutable
+  private rect: leaflet.Rectangle;
+
+  constructor(cell: Cell) {
+    // Initialize attributes
+    this.cell = cell;
+    this.coins = [];
+    this.rect = leaflet.rectangle(leaflet.latLngBounds(
+      leaflet.latLng(0, 0),
+      leaflet.latLng(0, 0),
+    ));
+  }
+
+  public createAsNew() {
+    // Determine num initial coins
+    const numInitCoins = Math.floor(
+      luck([this.cell.y, this.cell.x, "initialValue"].toString()) *
+          CACHE_MAX_INIT_COINS +
+        CACHE_MIN_INIT_COINS,
+    );
+
+    // Create initial coins
+    for (let i = 0; i < numInitCoins; i++) {
+      this.coins.push({
+        y: this.cell.y,
+        x: this.cell.x,
+        serial: i,
+      });
+    }
+
+    // Create rect
+    this.rect = this.createRect();
+  }
+
+  public toMemento() {
+    return JSON.stringify(this.coins);
+  }
+  public fromMemento(memento: string) {
+    this.coins = JSON.parse(memento);
+    this.rect = this.createRect();
+  }
+  public getPos(): string {
+    return `${this.cell.y}:${this.cell.x}`;
+  }
+
+  public createRect(): leaflet.Rectangle {
+    // Remove current rect
+    this.removeRect();
+
+    // Create rect and add it to map
+    const rect = leaflet.rectangle(board.getCellBounds(this.cell));
+    rect.addTo(map);
+
+    // Create popup
+    const popup = document.createElement("div");
+
+    // Create header
+    const header: HTMLHeadingElement = document.createElement("h3");
+    header.innerHTML = `<h4>Cache ${this.getPos()}</h4>`;
+    popup.append(header);
+
+    // Create inventory panel
+    const cacheInventoryPanel: HTMLDivElement = document.createElement("div");
+    cacheInventoryPanel.innerHTML = "Inventory:";
+    popup.append(cacheInventoryPanel);
+
+    // Create mode buttons
+    let collectMode = true;
+
+    const collectModeButton: HTMLButtonElement = document.createElement(
+      "button",
+    );
+    collectModeButton.innerHTML = "Collect";
+    collectModeButton.addEventListener("click", () => {
+      collectMode = true;
+      updateModeButtons();
+      updateCoinsPanel();
+    });
+    cacheInventoryPanel.append(collectModeButton);
+
+    const depositModeButton: HTMLButtonElement = document.createElement(
+      "button",
+    );
+    depositModeButton.innerHTML = "Deposit";
+    depositModeButton.addEventListener("click", () => {
+      collectMode = false;
+      updateModeButtons();
+      updateCoinsPanel();
+    });
+    cacheInventoryPanel.append(depositModeButton);
+
+    updateModeButtons();
+
+    function updateModeButtons(): void {
+      collectModeButton.disabled = collectMode;
+      depositModeButton.disabled = !collectMode;
+    }
+
+    // Define function
+    const updateCoinsPanel = (): void => {
+      // Define functions
+      const showCacheCoins = (): void => {
+        this.coins.forEach((coin, index) => {
+          // Coin
+          const coinSpan = document.createElement("span");
+          coinSpan.innerHTML = `<br>${getCoinInfo(coin)}`;
+          coinPanel.append(coinSpan);
+
+          // Collect Button
+          const collectButton = document.createElement("button");
+          collectButton.innerHTML = "Collect";
+          collectButton.addEventListener("click", () => {
+            this.coins.splice(index, 1); // remove coin
+            updateCoinsPanel();
+            addCoinToPlayerInventory(coin);
+            cacheMementos.set(this.getPos(), this.toMemento());
+          });
+          coinSpan.append(collectButton);
+        });
+      };
+      const showPlayerCoins = (): void => {
+        playerCoins.forEach((coin, index) => {
+          // Coin
+          const coinSpan = document.createElement("span");
+          coinSpan.innerHTML = `<br>${getCoinInfo(coin)}`;
+          coinPanel.append(coinSpan);
+
+          // Deposit Button
+          const depositButton = document.createElement("button");
+          depositButton.innerHTML = "Deposit";
+          depositButton.addEventListener("click", () => {
+            const playerCoin = removeCoinFromPlayerInventory(index);
+            this.coins.push(playerCoin);
+            updateCoinsPanel();
+            cacheMementos.set(this.getPos(), this.toMemento());
+          });
+          coinSpan.append(depositButton);
+        });
+      };
+      function getCoinInfo(coin: Coin): string {
+        return `🪙${coin.y}:${coin.x}#${coin.serial}`;
+      }
+
+      // Reset coins panel
+      coinPanel.innerHTML = "";
+
+      // Show coins based on mode
+      if (collectMode) {
+        showCacheCoins();
+      } else {
+        showPlayerCoins();
+      }
+    };
+
+    // Create coins panel
+    const coinPanel: HTMLDivElement = document.createElement("div");
+    cacheInventoryPanel.append(coinPanel);
+    updateCoinsPanel();
+
+    // Bind popup to rect and return
+    rect.bindPopup(() => popup);
+    return rect;
+  }
+  public removeRect() {
+    this.rect.remove();
+  }
+}
 
 // Set app name
 const appTitle: HTMLHeadingElement = document.querySelector<HTMLHeadingElement>(
@@ -79,7 +254,10 @@ playerMarker.addTo(map);
 // Set movement button click behavior
 document.querySelector<HTMLButtonElement>("#moveNorthButton")!.addEventListener(
   "click",
-  () => movePlayer(1, 0),
+  () => {
+    movePlayer(1, 0);
+    console.log(cacheMementos);
+  },
 );
 document.querySelector<HTMLButtonElement>("#moveSouthButton")!.addEventListener(
   "click",
@@ -137,6 +315,11 @@ function addCoinToPlayerInventory(coin: Coin): void {
   playerCoins.push(coin);
   updatePlayerInventoryPanel();
 }
+function removeCoinFromPlayerInventory(index: number): Coin {
+  const coin = playerCoins.splice(index, 1)[0];
+  updatePlayerInventoryPanel();
+  return coin;
+}
 
 // Create board
 const board = new Board(TILE_WIDTH, TILE_VISIBILITY_RADIUS);
@@ -147,7 +330,7 @@ updateNearbyCaches();
 function updateNearbyCaches(): void {
   // Remove previous nearby caches
   nearbyCaches.forEach((cache) => {
-    cache.remove();
+    cache.removeRect();
   });
   nearbyCaches = [];
 
@@ -161,116 +344,17 @@ function updateNearbyCaches(): void {
 
 /** Adds a cache to the map at a cell's position. */
 function spawnCache(cell: Cell): Cache {
-  // Add cache (a rectangle) to the map where the cell is
-  const cache: leaflet.Rectangle = leaflet.rectangle(
-    board.getCellBounds(cell),
-  );
-  cache.addTo(map);
+  // Create cache
+  const cache = new Cache(cell);
 
-  // Set num initial coins
-  const numInitialCoins: number = Math.floor(
-    luck([cell.y, cell.x, "initialValue"].toString()) *
-        CACHE_MAX_INITIAL_COINS + CACHE_MIN_INITIAL_COINS,
-  );
-
-  // Create coin array
-  const cacheCoins: Coin[] = [];
-  for (let i = 0; i < numInitialCoins; i++) {
-    cacheCoins[i] = {
-      y: cell.y,
-      x: cell.x,
-      serial: i,
-    };
+  // Set cache state
+  if (cacheMementos.has(cache.getPos())) {
+    // State of cache is stored in memory, so load it in
+    cache.fromMemento(cacheMementos.get(cache.getPos())!);
+  } else {
+    // State of cache is not stored in memory, so create new state
+    cache.createAsNew();
   }
-
-  // Initialize mode
-  let collectMode = true;
-
-  // Create popup
-  const popup: HTMLDivElement = document.createElement("div");
-
-  const header: HTMLHeadingElement = document.createElement("h3");
-  header.innerHTML = `<h4>Cache ${cell.y}:${cell.x}</h4>`;
-  popup.append(header);
-
-  const collectModeButton: HTMLButtonElement = document.createElement(
-    "button",
-  );
-  collectModeButton.innerHTML = "Collect";
-  collectModeButton.disabled = true; // collect mode enabled initially
-  collectModeButton.addEventListener("click", () => {
-    collectMode = true;
-    collectModeButton.disabled = true;
-    depositModeButton.disabled = false;
-    updateCacheInventoryPanel();
-  });
-  const depositModeButton: HTMLButtonElement = document.createElement(
-    "button",
-  );
-  depositModeButton.innerHTML = "Deposit";
-  depositModeButton.addEventListener("click", () => {
-    collectMode = false;
-    collectModeButton.disabled = false;
-    depositModeButton.disabled = true;
-    updateCacheInventoryPanel();
-  });
-  const cacheInventoryPanel: HTMLDivElement = document.createElement("div");
-  popup.append(cacheInventoryPanel);
-  updateCacheInventoryPanel();
-
-  /** Makes the cache's inventory panel display either the cache's or the player's coins, depending on cache's mode. */
-  function updateCacheInventoryPanel(): void {
-    // Reset the inventory pannel elem
-    cacheInventoryPanel.innerHTML = "Inventory:";
-
-    // Re add the mode buttons
-    cacheInventoryPanel.append(collectModeButton);
-    cacheInventoryPanel.append(depositModeButton);
-
-    if (collectMode) {
-      // Show the cache's coins
-      cacheCoins.forEach((coin, index) => {
-        // Coin
-        const coinElem = document.createElement("span");
-        coinElem.innerHTML = `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
-        cacheInventoryPanel.append(coinElem);
-
-        // Collect Button
-        const collectButton = document.createElement("button");
-        collectButton.innerHTML = "Collect";
-        collectButton.addEventListener("click", () => {
-          cacheCoins.splice(index, 1);
-          addCoinToPlayerInventory(coin);
-          updateCacheInventoryPanel();
-        });
-        coinElem.append(collectButton);
-      });
-    } else {
-      // Show the player's coins
-      playerCoins.forEach((coin, index) => {
-        // Coin
-        const coinElem = document.createElement("span");
-        coinElem.innerHTML = `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
-        cacheInventoryPanel.append(coinElem);
-
-        // Deposit Button
-        const depositButton = document.createElement("button");
-        depositButton.innerHTML = "Deposit";
-        depositButton.addEventListener("click", () => {
-          const playerCoin = playerCoins.splice(index, 1)[0];
-          updatePlayerInventoryPanel();
-          cacheCoins.push(playerCoin);
-          updateCacheInventoryPanel();
-        });
-        coinElem.append(depositButton);
-      });
-    }
-  }
-
-  // Make popup appear when cache is clicked
-  cache.bindPopup(() => {
-    return popup;
-  });
 
   // Return
   return cache;
