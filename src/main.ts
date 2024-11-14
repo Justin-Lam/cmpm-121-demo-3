@@ -51,6 +51,8 @@ const CACHE_MAX_INIT_COINS: number = 10; // pretty sure this is exclusive
 // Variables
 const cacheMementos: Map<string, string> = new Map<string, string>();
 let playerPosition: leaflet.LatLng = OAKES_CLASSROOM;
+let autoPositioningEnabled: boolean = false;
+let geoLocWatchPosHandlerID: number = 0;
 let nearbyCaches: Cache[] = [];
 const playerCoins: Coin[] = [];
 
@@ -251,32 +253,67 @@ const playerMarker = leaflet.marker(playerPosition);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
-// Set movement button click behavior
-document.querySelector<HTMLButtonElement>("#moveNorthButton")!.addEventListener(
-  "click",
-  () => {
-    movePlayer(1, 0);
-    console.log(cacheMementos);
-  },
-);
-document.querySelector<HTMLButtonElement>("#moveSouthButton")!.addEventListener(
-  "click",
-  () => movePlayer(-1, 0),
-);
-document.querySelector<HTMLButtonElement>("#moveWestButton")!.addEventListener(
-  "click",
-  () => movePlayer(0, -1),
-);
-document.querySelector<HTMLButtonElement>("#moveEastButton")!.addEventListener(
-  "click",
-  () => movePlayer(0, 1),
-);
+// Set control panel button click behaviors
+const toggleAutoPosButton = document.querySelector<HTMLButtonElement>(
+  "#toggleAutoPosButton",
+)!;
+toggleAutoPosButton.addEventListener("click", () => toggleAutoPositioning());
+const moveNorthButton = document.querySelector<HTMLButtonElement>(
+  "#moveNorthButton",
+)!;
+moveNorthButton.addEventListener("click", () => movePlayer(1, 0));
+const moveSouthButton = document.querySelector<HTMLButtonElement>(
+  "#moveSouthButton",
+)!;
+moveSouthButton.addEventListener("click", () => movePlayer(-1, 0));
+const moveWestButton = document.querySelector<HTMLButtonElement>(
+  "#moveWestButton",
+)!;
+moveWestButton.addEventListener("click", () => movePlayer(0, -1));
+const moveEastButton = document.querySelector<HTMLButtonElement>(
+  "#moveEastButton",
+)!;
+moveEastButton.addEventListener("click", () => movePlayer(0, 1));
 document.querySelector<HTMLButtonElement>("#resetPositionButton")!
   .addEventListener(
     "click",
     () => resetPlayerPosition(),
   );
 
+function toggleAutoPositioning(): void {
+  autoPositioningEnabled = !autoPositioningEnabled;
+  if (autoPositioningEnabled) {
+    // start watching position
+    geoLocWatchPosHandlerID = navigator.geolocation.watchPosition(
+      (geoLocPos) => {
+        playerPosition = leaflet.latLng({
+          lat: geoLocPos.coords.latitude,
+          lng: geoLocPos.coords.longitude,
+        });
+        onPlayerMove();
+      },
+      undefined, // skipping the optional error callback parameter
+      { enableHighAccuracy: true },
+    );
+    // indicate that button is enabled
+    toggleAutoPosButton.classList.add("enabled");
+    // disable all movement buttons
+    toggleMovementButtons();
+  } else {
+    // stop watching position
+    navigator.geolocation.clearWatch(geoLocWatchPosHandlerID);
+    // indicate that button is disabled
+    toggleAutoPosButton.classList.remove("enabled");
+    // enable all movement buttons
+    toggleMovementButtons();
+  }
+}
+function toggleMovementButtons() {
+  moveNorthButton.disabled = !moveNorthButton.disabled;
+  moveSouthButton.disabled = !moveSouthButton.disabled;
+  moveWestButton.disabled = !moveWestButton.disabled;
+  moveEastButton.disabled = !moveEastButton.disabled;
+}
 function movePlayer(up: number, down: number): void {
   playerPosition = leaflet.latLng({
     lat: playerPosition.lat + up * TILE_WIDTH,
