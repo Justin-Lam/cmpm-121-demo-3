@@ -54,7 +54,7 @@ let playerPosition: leaflet.LatLng = OAKES_CLASSROOM;
 let autoPositioningEnabled: boolean = false;
 let geoLocWatchPosHandlerID: number = 0;
 let nearbyCaches: Cache[] = [];
-const playerCoins: Coin[] = [];
+let playerCoins: Coin[] = [];
 
 // Classes
 class Cache implements Memento<string> {
@@ -175,6 +175,7 @@ class Cache implements Memento<string> {
             updateCoinsPanel();
             addCoinToPlayerInventory(coin);
             cacheMementos.set(this.getPos(), this.toMemento());
+            saveSession();
           });
           coinSpan.append(collectButton);
         });
@@ -194,6 +195,7 @@ class Cache implements Memento<string> {
             this.coins.push(playerCoin);
             updateCoinsPanel();
             cacheMementos.set(this.getPos(), this.toMemento());
+            saveSession();
           });
           coinSpan.append(depositButton);
         });
@@ -282,6 +284,7 @@ document.querySelector<HTMLButtonElement>("#resetPositionButton")!
 
 function toggleAutoPositioning(): void {
   autoPositioningEnabled = !autoPositioningEnabled;
+  saveSession();
   if (autoPositioningEnabled) {
     // start watching position
     geoLocWatchPosHandlerID = navigator.geolocation.watchPosition(
@@ -290,6 +293,7 @@ function toggleAutoPositioning(): void {
           lat: geoLocPos.coords.latitude,
           lng: geoLocPos.coords.longitude,
         });
+        saveSession();
         onPlayerMove();
       },
       undefined, // skipping the optional error callback parameter
@@ -319,6 +323,7 @@ function movePlayer(up: number, down: number): void {
     lat: playerPosition.lat + up * TILE_WIDTH,
     lng: playerPosition.lng + down * TILE_WIDTH,
   });
+  saveSession();
   onPlayerMove();
 }
 function resetPlayerPosition(): void {
@@ -350,10 +355,12 @@ function updatePlayerInventoryPanel(): void {
 /** Adds a coin to the player's inventory and updates the player inventory panel. */
 function addCoinToPlayerInventory(coin: Coin): void {
   playerCoins.push(coin);
+  saveSession();
   updatePlayerInventoryPanel();
 }
 function removeCoinFromPlayerInventory(index: number): Coin {
   const coin = playerCoins.splice(index, 1)[0];
+  saveSession();
   updatePlayerInventoryPanel();
   return coin;
 }
@@ -395,4 +402,64 @@ function spawnCache(cell: Cell): Cache {
 
   // Return
   return cache;
+}
+
+// Load session
+loadSession();
+
+function saveSession() {
+  // cacheMementos
+  const cacheMementosArray: string[] = [];
+  cacheMementos.forEach((val, key) => {
+    cacheMementosArray.push(key);
+    cacheMementosArray.push(val);
+  });
+  localStorage.setItem("cacheMementos", JSON.stringify(cacheMementosArray));
+  console.log("1: " + localStorage.getItem("cacheMementos"));
+  console.log("2: " + JSON.parse(localStorage.getItem("cacheMementos")!));
+
+  // playerPosition
+  localStorage.setItem("playerPositionLat", playerPosition.lat.toString());
+  localStorage.setItem("playerPositionLng", playerPosition.lng.toString());
+
+  // autoPositioningEnabled
+  if (autoPositioningEnabled) {
+    localStorage.setItem("autoPositioningEnabled", "true");
+  } else {
+    localStorage.setItem("autoPositioningEnabled", "false");
+  }
+
+  // playerCoins
+  localStorage.setItem("playerCoins", JSON.stringify(playerCoins));
+}
+
+function loadSession() {
+  // cacheMementos
+  const cacheMementosArray: string[] = JSON.parse(
+    localStorage.getItem("cacheMementos")!,
+  );
+  for (let i = 0; i < cacheMementosArray.length / 2; i++) {
+    cacheMementos.set(cacheMementosArray[i * 2], cacheMementosArray[i * 2 + 1]);
+  }
+
+  // playerPosition
+  playerPosition = leaflet.latLng(
+    Number(localStorage.getItem("playerPositionLat")),
+    Number(localStorage.getItem("playerPositionLng")),
+  );
+  onPlayerMove();
+
+  // autoPositioningEnabled
+  autoPositioningEnabled =
+    localStorage.getItem("autoPositioningEnabled") == "true";
+  if (autoPositioningEnabled) {
+    toggleMovementButtons();
+  }
+
+  // playerCoins
+  const loadedCoins = localStorage.getItem("playerCoins");
+  if (loadedCoins != null) {
+    playerCoins = JSON.parse(loadedCoins);
+    updatePlayerInventoryPanel();
+  }
 }
