@@ -165,7 +165,7 @@ class Cache implements Memento<string> {
           // Coin
           const coinSpan = document.createElement("span");
           coinSpan.innerHTML = `<br>${getCoinInfo(coin)}`;
-          coinPanel.append(coinSpan);
+          cacheCoinPanel.append(coinSpan);
 
           // Collect Button
           const collectButton = document.createElement("button");
@@ -185,7 +185,7 @@ class Cache implements Memento<string> {
           // Coin
           const coinSpan = document.createElement("span");
           coinSpan.innerHTML = `<br>${getCoinInfo(coin)}`;
-          coinPanel.append(coinSpan);
+          cacheCoinPanel.append(coinSpan);
 
           // Deposit Button
           const depositButton = document.createElement("button");
@@ -205,7 +205,7 @@ class Cache implements Memento<string> {
       }
 
       // Reset coins panel
-      coinPanel.innerHTML = "";
+      cacheCoinPanel.innerHTML = "";
 
       // Show coins based on mode
       if (collectMode) {
@@ -216,8 +216,8 @@ class Cache implements Memento<string> {
     };
 
     // Create coins panel
-    const coinPanel: HTMLDivElement = document.createElement("div");
-    cacheInventoryPanel.append(coinPanel);
+    const cacheCoinPanel: HTMLDivElement = document.createElement("div");
+    cacheInventoryPanel.append(cacheCoinPanel);
     updateCoinsPanel();
 
     // Bind popup to rect and return
@@ -362,14 +362,30 @@ const playerInventoryPanel: HTMLDivElement = document.querySelector<
 >(
   "#inventoryPanel",
 )!;
+playerInventoryPanel.innerHTML = "Inventory:";
+const playerCoinPanel: HTMLDivElement = document.createElement("div");
+playerInventoryPanel.append(playerCoinPanel);
 updatePlayerInventoryPanel();
 
 /** Makes the player inventory panel display the player's current coins. */
 function updatePlayerInventoryPanel(): void {
-  playerInventoryPanel.innerHTML = "Inventory:";
+  playerCoinPanel.innerHTML = "";
   playerCoins.forEach((coin) => {
-    playerInventoryPanel.innerHTML +=
-      `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
+    // Coin
+    const coinSpan = document.createElement("span");
+    coinSpan.innerHTML = `<br>🪙${coin.y}:${coin.x}#${coin.serial}`;
+    playerCoinPanel.append(coinSpan);
+
+    // View Cache Button
+    const viewCacheButton = document.createElement("button");
+    viewCacheButton.innerHTML = "View Cache";
+    viewCacheButton.addEventListener("click", () => {
+      map.panTo(leaflet.latLng(
+        coin.y * TILE_WIDTH,
+        coin.x * TILE_WIDTH,
+      ));
+    });
+    coinSpan.append(viewCacheButton);
   });
 }
 /** Adds a coin to the player's inventory and updates the player inventory panel. */
