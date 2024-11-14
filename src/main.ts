@@ -49,7 +49,7 @@ const CACHE_MIN_INIT_COINS: number = 1;
 const CACHE_MAX_INIT_COINS: number = 10; // pretty sure this is exclusive
 
 // Variables
-const cacheMementos: Map<string, string> = new Map<string, string>();
+let cacheMementos: Map<string, string> = new Map<string, string>();
 let playerPosition: leaflet.LatLng = OAKES_CLASSROOM;
 let autoPositioningEnabled: boolean = false;
 let geoLocWatchPosHandlerID: number = 0;
@@ -276,10 +276,10 @@ const moveEastButton = document.querySelector<HTMLButtonElement>(
   "#moveEastButton",
 )!;
 moveEastButton.addEventListener("click", () => movePlayer(0, 1));
-document.querySelector<HTMLButtonElement>("#resetPositionButton")!
+document.querySelector<HTMLButtonElement>("#restartGameButton")!
   .addEventListener(
     "click",
-    () => resetPlayerPosition(),
+    () => restartGame(),
   );
 
 function toggleAutoPositioning(): void {
@@ -326,14 +326,34 @@ function movePlayer(up: number, down: number): void {
   saveSession();
   onPlayerMove();
 }
-function resetPlayerPosition(): void {
-  playerPosition = OAKES_CLASSROOM;
-  onPlayerMove();
-}
 function onPlayerMove(): void {
   playerMarker.setLatLng(playerPosition);
   map.panTo(playerPosition);
   updateNearbyCaches();
+}
+function restartGame(): void {
+  const answer = prompt(
+    "Are you sure you want to restart? The game will be reset entirely and you will lose everything. (y/n)",
+    "n",
+  );
+  if (answer == "y") {
+    cacheMementos = new Map<string, string>();
+
+    playerPosition = OAKES_CLASSROOM;
+    onPlayerMove();
+
+    if (autoPositioningEnabled) {
+      toggleMovementButtons();
+    }
+    autoPositioningEnabled = false;
+    navigator.geolocation.clearWatch(geoLocWatchPosHandlerID);
+    toggleAutoPosButton.classList.remove("enabled");
+
+    playerCoins = [];
+    updatePlayerInventoryPanel();
+
+    localStorage.clear();
+  }
 }
 
 // Show player inventory
@@ -415,8 +435,6 @@ function saveSession() {
     cacheMementosArray.push(val);
   });
   localStorage.setItem("cacheMementos", JSON.stringify(cacheMementosArray));
-  console.log("1: " + localStorage.getItem("cacheMementos"));
-  console.log("2: " + JSON.parse(localStorage.getItem("cacheMementos")!));
 
   // playerPosition
   localStorage.setItem("playerPositionLat", playerPosition.lat.toString());
@@ -435,31 +453,43 @@ function saveSession() {
 
 function loadSession() {
   // cacheMementos
-  const cacheMementosArray: string[] = JSON.parse(
-    localStorage.getItem("cacheMementos")!,
-  );
-  for (let i = 0; i < cacheMementosArray.length / 2; i++) {
-    cacheMementos.set(cacheMementosArray[i * 2], cacheMementosArray[i * 2 + 1]);
+  if (localStorage.getItem("cacheMementos") != null) {
+    const cacheMementosArray: string[] = JSON.parse(
+      localStorage.getItem("cacheMementos")!,
+    );
+    for (let i = 0; i < cacheMementosArray.length / 2; i++) {
+      cacheMementos.set(
+        cacheMementosArray[i * 2],
+        cacheMementosArray[i * 2 + 1],
+      );
+    }
   }
 
   // playerPosition
-  playerPosition = leaflet.latLng(
-    Number(localStorage.getItem("playerPositionLat")),
-    Number(localStorage.getItem("playerPositionLng")),
-  );
-  onPlayerMove();
+  if (
+    localStorage.getItem("playerPositionLat") != null &&
+    localStorage.getItem("playerPositionLng") != null
+  ) {
+    playerPosition = leaflet.latLng(
+      Number(localStorage.getItem("playerPositionLat")),
+      Number(localStorage.getItem("playerPositionLng")),
+    );
+    onPlayerMove();
+  }
 
   // autoPositioningEnabled
-  autoPositioningEnabled =
-    localStorage.getItem("autoPositioningEnabled") == "true";
-  if (autoPositioningEnabled) {
-    toggleMovementButtons();
+  if (localStorage.getItem("autoPositioningEnabled") != null) {
+    autoPositioningEnabled =
+      localStorage.getItem("autoPositioningEnabled") == "true";
+    if (autoPositioningEnabled) {
+      toggleAutoPosButton.classList.add("enabled");
+      toggleMovementButtons();
+    }
   }
 
   // playerCoins
-  const loadedCoins = localStorage.getItem("playerCoins");
-  if (loadedCoins != null) {
-    playerCoins = JSON.parse(loadedCoins);
+  if (localStorage.getItem("playerCoins") != null) {
+    playerCoins = JSON.parse(localStorage.getItem("playerCoins")!);
     updatePlayerInventoryPanel();
   }
 }
