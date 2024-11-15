@@ -51,6 +51,13 @@ const CACHE_MAX_INIT_COINS: number = 10; // pretty sure this is exclusive
 // Variables
 let cacheMementos: Map<string, string> = new Map<string, string>();
 let playerPosition: leaflet.LatLng = OAKES_CLASSROOM;
+let currentPlayerMovementHistory: leaflet.LatLng[] = [playerPosition];
+let playerMovementHistory: leaflet.LatLng[][] = [currentPlayerMovementHistory];
+let viewPlayerMovementHistory = false;
+const playerMovementHistoryPolyline: leaflet.Polyline = leaflet.polyline(
+  playerMovementHistory,
+  { color: "red" },
+);
 let autoPositioningEnabled: boolean = false;
 let geoLocWatchPosHandlerID: number = 0;
 let nearbyCaches: Cache[] = [];
@@ -276,6 +283,13 @@ const moveEastButton = document.querySelector<HTMLButtonElement>(
   "#moveEastButton",
 )!;
 moveEastButton.addEventListener("click", () => movePlayer(0, 1));
+const viewMovementHistoryButton = document.querySelector<HTMLButtonElement>(
+  "#viewMovementHistoryButton",
+)!;
+viewMovementHistoryButton.addEventListener(
+  "click",
+  () => toggleViewMovementHistory(),
+);
 document.querySelector<HTMLButtonElement>("#restartGameButton")!
   .addEventListener(
     "click",
@@ -284,6 +298,8 @@ document.querySelector<HTMLButtonElement>("#restartGameButton")!
 
 function toggleAutoPositioning(): void {
   autoPositioningEnabled = !autoPositioningEnabled;
+  currentPlayerMovementHistory = [];
+  playerMovementHistory.push(currentPlayerMovementHistory);
   saveSession();
   if (autoPositioningEnabled) {
     // start watching position
@@ -306,6 +322,8 @@ function toggleAutoPositioning(): void {
   } else {
     // stop watching position
     navigator.geolocation.clearWatch(geoLocWatchPosHandlerID);
+    // log new position for polyine
+    onPlayerMove();
     // indicate that button is disabled
     toggleAutoPosButton.classList.remove("enabled");
     // enable all movement buttons
@@ -327,9 +345,25 @@ function movePlayer(up: number, down: number): void {
   onPlayerMove();
 }
 function onPlayerMove(): void {
+  currentPlayerMovementHistory.push(playerPosition);
+  playerMovementHistory[playerMovementHistory.length - 1] =
+    currentPlayerMovementHistory;
+  playerMovementHistoryPolyline.setLatLngs(playerMovementHistory);
+  saveSession();
   playerMarker.setLatLng(playerPosition);
   map.panTo(playerPosition);
   updateNearbyCaches();
+}
+function toggleViewMovementHistory(): void {
+  viewPlayerMovementHistory = !viewPlayerMovementHistory;
+  saveSession();
+  if (viewPlayerMovementHistory) {
+    playerMovementHistoryPolyline.addTo(map);
+    viewMovementHistoryButton.classList.add("enabled");
+  } else {
+    playerMovementHistoryPolyline.remove();
+    viewMovementHistoryButton.classList.remove("enabled");
+  }
 }
 function restartGame(): void {
   const answer = prompt(
@@ -342,12 +376,19 @@ function restartGame(): void {
     playerPosition = OAKES_CLASSROOM;
     onPlayerMove();
 
+    currentPlayerMovementHistory = [playerPosition];
+    playerMovementHistory = [currentPlayerMovementHistory];
+    if (viewPlayerMovementHistory) {
+      toggleViewMovementHistory();
+    }
+    playerMovementHistoryPolyline.setLatLngs([]);
+
     if (autoPositioningEnabled) {
+      autoPositioningEnabled = false;
+      navigator.geolocation.clearWatch(geoLocWatchPosHandlerID);
+      toggleAutoPosButton.classList.remove("enabled");
       toggleMovementButtons();
     }
-    autoPositioningEnabled = false;
-    navigator.geolocation.clearWatch(geoLocWatchPosHandlerID);
-    toggleAutoPosButton.classList.remove("enabled");
 
     playerCoins = [];
     updatePlayerInventoryPanel();
@@ -456,6 +497,19 @@ function saveSession() {
   localStorage.setItem("playerPositionLat", playerPosition.lat.toString());
   localStorage.setItem("playerPositionLng", playerPosition.lng.toString());
 
+  // playerMovementHistory
+  localStorage.setItem(
+    "playerMovementHistory",
+    JSON.stringify(playerMovementHistory),
+  );
+
+  // viewPlayerMovementHistory
+  if (viewPlayerMovementHistory) {
+    localStorage.setItem("viewPlayerMovementHistory", "true");
+  } else {
+    localStorage.setItem("viewPlayerMovementHistory", "false");
+  }
+
   // autoPositioningEnabled
   if (autoPositioningEnabled) {
     localStorage.setItem("autoPositioningEnabled", "true");
@@ -465,6 +519,7 @@ function saveSession() {
 
   // playerCoins
   localStorage.setItem("playerCoins", JSON.stringify(playerCoins));
+  console.log(localStorage.getItem("playerCoins"));
 }
 
 function loadSession() {
@@ -482,15 +537,37 @@ function loadSession() {
   }
 
   // playerPosition
+  let callOnPlayerMove = false;
+
   if (
     localStorage.getItem("playerPositionLat") != null &&
     localStorage.getItem("playerPositionLng") != null
   ) {
+    callOnPlayerMove = true;
     playerPosition = leaflet.latLng(
       Number(localStorage.getItem("playerPositionLat")),
       Number(localStorage.getItem("playerPositionLng")),
     );
-    onPlayerMove();
+  }
+
+  // playerMovementHistory
+  if (localStorage.getItem("playerMovementHistory") != null) {
+    callOnPlayerMove = true;
+    playerMovementHistory = JSON.parse(
+      localStorage.getItem("playerMovementHistory")!,
+    );
+    currentPlayerMovementHistory = [];
+    playerMovementHistory.push(currentPlayerMovementHistory);
+  }
+
+  // viewPlayerMovementHistory
+  if (localStorage.getItem("viewPlayerMovementHistory") != null) {
+    viewPlayerMovementHistory =
+      localStorage.getItem("viewPlayerMovementHistory") == "true";
+    if (viewPlayerMovementHistory) {
+      playerMovementHistoryPolyline.addTo(map);
+      viewMovementHistoryButton.classList.add("enabled");
+    }
   }
 
   // autoPositioningEnabled
@@ -504,8 +581,15 @@ function loadSession() {
   }
 
   // playerCoins
+  console.log(localStorage.getItem("playerCoins"));
+
   if (localStorage.getItem("playerCoins") != null) {
     playerCoins = JSON.parse(localStorage.getItem("playerCoins")!);
     updatePlayerInventoryPanel();
+  }
+
+  // Call onPlayerMove()
+  if (callOnPlayerMove) {
+    onPlayerMove();
   }
 }
